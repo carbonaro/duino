@@ -1,10 +1,37 @@
+#include <LCD4884.h>
 #include <Servo.h>
+
+//keypad debounce parameter
+#define DEBOUNCE_MAX 15
+#define DEBOUNCE_ON  10
+#define DEBOUNCE_OFF 3 
+
+#define NUM_KEYS 5
+
+// joystick number
+#define LEFT_KEY 0
+#define CENTER_KEY 1
+#define DOWN_KEY 2
+#define RIGHT_KEY 3
+#define UP_KEY 4
+
+int  adc_key_val[5] ={
+  50, 200, 400, 600, 800 };
+
+// debounce counters
+byte button_count[NUM_KEYS];
+// button status - pressed/released
+byte button_status[NUM_KEYS];
+// button on flags for user program 
+byte button_flag[NUM_KEYS];
+
 char messageBuffer[12], cmd[3], pin[3], val[4], aux[4];
 boolean debug = false;
 int index = 0;
 Servo servo;
 
 void setup() {
+  setup_lcd();
   Serial.begin(115200);
 }
 
@@ -219,3 +246,115 @@ void handleServo(char *pin, char *val, char *aux) {
     }  
   }
 }
+
+/*
+ * Initialize LCD4884 shield
+ *
+ */
+void setup_lcd() {
+    for(byte i=0; i<NUM_KEYS; i++){
+    button_count[i]=0;
+    button_status[i]=0;
+    button_flag[i]=0;
+  }
+
+  // Setup timer2 -- Prescaler/256
+  TCCR2A &= ~((1<<WGM21) | (1<<WGM20));
+  TCCR2B &= ~(1<<WGM22);
+  TCCR2B = (1<<CS22)|(1<<CS21);      
+
+  ASSR |=(0<<AS2);
+
+  // Use normal mode  
+  TCCR2A =0;    
+  //Timer2 Overflow Interrupt Enable  
+  TIMSK2 |= (0<<OCIE2A);
+  TCNT2=0x6;  // counting starts from 6;  
+  TIMSK2 = (1<<TOIE2);    
+
+
+
+  SREG|=1<<SREG_I;
+
+  lcd.LCD_init();
+  lcd.LCD_clear();
+  lcd.backlight(OFF);
+}
+
+// The followinging are interrupt-driven keypad reading functions
+// which includes DEBOUNCE ON/OFF mechanism, and continuous pressing detection
+
+/*
+ * Convert ADC value to key number
+ * int input key indentifier
+ */
+char get_key(unsigned int input)
+{
+  char k;
+
+  for (k = 0; k < NUM_KEYS; k++)
+  {
+    if (input < adc_key_val[k])
+    {
+
+      return k;
+    }
+  }
+
+  if (k >= NUM_KEYS)
+    k = -1;     // No valid key pressed
+
+  return k;
+}
+
+void update_adc_key(){
+  int adc_key_in;
+  char key_in;
+  byte i;
+
+  adc_key_in = analogRead(0);
+  key_in = get_key(adc_key_in);
+  for(i=0; i<NUM_KEYS; i++)
+  {
+    if(key_in==i)  //one key is pressed 
+    { 
+      if(button_count[i]<DEBOUNCE_MAX)
+      {
+        button_count[i]++;
+        if(button_count[i]>DEBOUNCE_ON)
+        {
+          if(button_status[i] == 0)
+          {
+            button_flag[i] = 1;
+            button_status[i] = 1; //button debounced to 'pressed' status
+          }
+
+        }
+      }
+
+    }
+    else // no button pressed
+    {
+      if (button_count[i] >0)
+      {  
+        button_flag[i] = 0;	
+        button_count[i]--;
+        if(button_count[i]<DEBOUNCE_OFF){
+          button_status[i]=0;   //button debounced to 'released' status
+        }
+      }
+    }
+
+  }
+}
+
+/*
+ * Timer Interrupt routine
+ *
+ * 1/(160000000/256/(256-6)) = 4ms interval
+ */
+ISR(TIMER2_OVF_vect) {  
+  TCNT2  = 6;
+  update_adc_key();
+}
+
