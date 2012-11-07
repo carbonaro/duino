@@ -82,10 +82,10 @@ void process() {
       case 4:  ar(pin);                   break;
       case 90: autoReply();               break;
       case 96:
-        msg_length = sizeof(messageBuffer) - 10;
+        msg_length = atoi(aux);
         strncpy(msg, messageBuffer + 10, msg_length);
         msg[msg_length] = '\0';
-        handleLcd(val, aux, msg);       
+        handleLcd(val, msg_length, msg);
         break;
       case 98: handleServo(pin,val,aux);  break;
       case 99: toggleDebug(val);          break;
@@ -234,9 +234,11 @@ void aw(char *pin, char *val) {
     }
 
 
-void handleLcd(char *val, char *aux, char *msg) {
+void handleLcd(char *val, int l, char *msg) {
   char line[84];
-  Serial.println("got lcd message");
+  Serial.print("got lcd message of ");
+  Serial.print(l);
+  Serial.print(" characters: ");
   Serial.println(msg);
   for (int i=0 ; i < 6 ; i++) {
     strncpy(line, msg + 84*i , 84);
