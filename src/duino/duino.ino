@@ -32,7 +32,7 @@ int  adc_key_val[5] ={
 /* cf. http://http://popdevelop.com/2010/04/mastering-timer-interrupts-on-the-arduino/ */
   unsigned int tcnt2;
 
-  char messageBuffer[10 + 84*6], cmd[3], pin[3], val[4], aux[4], msg[6*84];
+  char messageBuffer[10 + 84], cmd[3], pin[3], val[4], aux[4], msg[84 + 1];
   int msg_length = 0;
   unsigned char lcd_x = 0;
   unsigned char lcd_y = 0;
@@ -63,7 +63,7 @@ int  adc_key_val[5] ={
 */
 void process() {
   index = 0;
-  char x[2], y[1], m[1];
+  char x[3], y[2], m[2];
 
   strncpy(cmd, messageBuffer, 2);
   cmd[2] = '\0';
@@ -75,7 +75,8 @@ void process() {
   aux[3] = '\0';
   if (debug) {
     Serial.println(messageBuffer); }
-
+    Serial.println("zob");
+    Serial.println(cmd);
     int cmdid = atoi(cmd);
 
     switch(cmdid) {
@@ -91,7 +92,7 @@ void process() {
         // X:       2 bytes
         // Y:       1 byte
         // Mode:    1 byte
-        // Payload: up to 84*6 bytes
+        // Payload: up to 84 bytes
         strncpy(x, messageBuffer + 10, 2);
         x[2] = '\n';
         strncpy(y, messageBuffer + 12, 1);
@@ -99,6 +100,16 @@ void process() {
         strncpy(m, messageBuffer + 13, 1);
         m[1] = '\n';
         msg_length = atoi(aux);
+        Serial.print("x:");
+        Serial.print(x);
+        Serial.print(", y:");
+        Serial.print(y);
+        Serial.print(", mode:");
+        Serial.print(m);
+        Serial.print(", message (");
+        Serial.print(msg_length);
+        Serial.print("):");
+        Serial.println(msg);
         strncpy(msg, messageBuffer + 14, msg_length);
         msg[msg_length] = '\0';
         handleLcd(val, msg_length, atoi(x), atoi(y), atoi(m), msg);
@@ -251,11 +262,9 @@ void aw(char *pin, char *val) {
 
 // handleLcd(val, msg_length, lcd_x, lcd_y, lcd_mode, msg);
 void handleLcd(char *val, int len, unsigned char x, unsigned char y, char mode, char *msg) {
-  char line[84];
-  int l = 0;
-  l = 6*84 - (len + x + y*84);
+  char line[15];
   Serial.print("got lcd message of ");
-  Serial.print(l);
+  Serial.print(len);
   Serial.print(" characters: ");
   Serial.println(msg);
   switch(atoi(val)) {
@@ -266,12 +275,18 @@ void handleLcd(char *val, int len, unsigned char x, unsigned char y, char mode, 
        lcd.LCD_clear();
        for (int i=y ; i < 6 ; i++) {
          if (i == y) {
-           strncpy(line, msg, 84-x);
-           line[84-x] = '\n';
-           lcd.LCD_write_string(x, i, line, mode);
+           strncpy(line, msg, max(len, 14-x));
+           line[max(len, 14-x)] = '\n';
+           lcd.LCD_write_string(x*6, i, line, mode);
          } else {
-           strncpy(line, msg + 84*(i-y), 84);
-           line[84] = '\n';
+           if (len >= 14*(i+1)) {
+             // the line is going to be full
+             strncpy(line, msg + 14*(i-y), 14);
+             line[14] = '\n';
+           } else {
+             strncpy(line, msg + 14*(i-y), len-14*i);
+             line[len-14*i] = '\n';
+           }
            lcd.LCD_write_string(0, i, line, mode);
          }
        }
@@ -280,9 +295,9 @@ void handleLcd(char *val, int len, unsigned char x, unsigned char y, char mode, 
       // TDB
       break;
     case 3: // Writeln
-      strncpy(line, msg, 84-x);
-      line[84-x] = '\n';
-      lcd.LCD_write_string(x,y,line,mode);
+      strncpy(line, msg, max(len, 14-x));
+      line[max(len, 14-x)] = '\n';
+      lcd.LCD_write_string(x*6,y,line,mode);
       break;
     case 98:  // backlight(OFF)
       lcd.backlight(OFF);
