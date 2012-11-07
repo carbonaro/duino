@@ -32,8 +32,11 @@ int  adc_key_val[5] ={
 /* cf. http://http://popdevelop.com/2010/04/mastering-timer-interrupts-on-the-arduino/ */
   unsigned int tcnt2;
 
-  char messageBuffer[10], cmd[3], pin[3], val[4], aux[4], msg[84*6];
+  char messageBuffer[10 + 84*6], cmd[3], pin[3], val[4], aux[4], msg[6*84];
   int msg_length = 0;
+  unsigned char lcd_x = 0;
+  unsigned char lcd_y = 0;
+  char lcd_mode = MENU_NORMAL;
   boolean debug = false;
   int index = 0;
   Servo servo;
@@ -60,6 +63,7 @@ int  adc_key_val[5] ={
 */
 void process() {
   index = 0;
+  char x[2], y[1], m[1];
 
   strncpy(cmd, messageBuffer, 2);
   cmd[2] = '\0';
@@ -82,10 +86,22 @@ void process() {
       case 4:  ar(pin);                   break;
       case 90: autoReply();               break;
       case 96:
+        // Lcd message structure
+        //
+        // X:       2 bytes
+        // Y:       1 byte
+        // Mode:    1 byte
+        // Payload: up to 84*6 bytes
+        strncpy(x, messageBuffer + 10, 2);
+        x[2] = '\n';
+        strncpy(y, messageBuffer + 12, 1);
+        y[1] = '\n';
+        strncpy(m, messageBuffer + 13, 1);
+        m[1] = '\n';
         msg_length = atoi(aux);
-        strncpy(msg, messageBuffer + 10, msg_length);
+        strncpy(msg, messageBuffer + 14, msg_length);
         msg[msg_length] = '\0';
-        handleLcd(val, msg_length, msg);
+        handleLcd(val, msg_length, atoi(x), atoi(y), atoi(m), msg);
         break;
       case 98: handleServo(pin,val,aux);  break;
       case 99: toggleDebug(val);          break;
@@ -233,16 +249,50 @@ void aw(char *pin, char *val) {
       return ret;
     }
 
-
-void handleLcd(char *val, int l, char *msg) {
+// handleLcd(val, msg_length, lcd_x, lcd_y, lcd_mode, msg);
+void handleLcd(char *val, int len, unsigned char x, unsigned char y, char mode, char *msg) {
   char line[84];
+  int l = 0;
+  l = 6*84 - (len + x + y*84);
   Serial.print("got lcd message of ");
   Serial.print(l);
   Serial.print(" characters: ");
   Serial.println(msg);
-  for (int i=0 ; i < 6 ; i++) {
-    strncpy(line, msg + 84*i , 84);
-    lcd.LCD_write_string(MENU_X, MENU_Y + i, line, MENU_NORMAL);
+  switch(atoi(val)) {
+    case 0: // LCD_clear
+      lcd.LCD_clear();
+      break;
+    case 1: // LCD_write_string
+       lcd.LCD_clear();
+       for (int i=y ; i < 6 ; i++) {
+         if (i == y) {
+           strncpy(line, msg, 84-x);
+           line[84-x] = '\n';
+           lcd.LCD_write_string(x, i, line, mode);
+         } else {
+           strncpy(line, msg + 84*(i-y), 84);
+           line[84] = '\n';
+           lcd.LCD_write_string(0, i, line, mode);
+         }
+       }
+       break;
+    case 2: // LCD_write_string_big
+      // TDB
+      break;
+    case 3: // Writeln
+      strncpy(line, msg, 84-x);
+      line[84-x] = '\n';
+      lcd.LCD_write_string(x,y,line,mode);
+      break;
+    case 98:  // backlight(OFF)
+      lcd.backlight(OFF);
+      break;
+    case 99: // backlight(ON)
+      lcd.backlight(ON);
+      break;
+    default:
+      // Noop
+      break;
   }
 }
 
