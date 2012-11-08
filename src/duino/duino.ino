@@ -1,6 +1,10 @@
 #include <LCD4884.h>
 #include <Servo.h>
 
+// Node.js <--> Arduino serial protocol delimiters
+#define SERIAL_START_CHAR 2 // ASCII code for Start of text
+#define SERIAL_END_CHAR 3 // ASCII code for End of text
+
 //keypad debounce parameter
 #define DEBOUNCE_MAX 15
 #define DEBOUNCE_ON  10
@@ -52,8 +56,8 @@ int  adc_key_val[5] ={
   */
   while(Serial.available() > 0) {
     char x = Serial.read();
-    if (x == '!') index = 0;      // start
-    else if (x == '.') process(); // end
+    if (x == SERIAL_START_CHAR) index = 0;      // start
+    else if (x == SERIAL_END_CHAR) process(); // end
     else messageBuffer[index++] = x;
   }
 }
@@ -75,8 +79,6 @@ void process() {
   aux[3] = '\0';
   if (debug) {
     Serial.println(messageBuffer); }
-    Serial.println("zob");
-    Serial.println(cmd);
     int cmdid = atoi(cmd);
 
     switch(cmdid) {
@@ -94,13 +96,16 @@ void process() {
         // Mode:    1 byte
         // Payload: up to 84 bytes
         strncpy(x, messageBuffer + 10, 2);
-        x[2] = '\n';
+        x[2] = '\0';
         strncpy(y, messageBuffer + 12, 1);
-        y[1] = '\n';
+        y[1] = '\0';
         strncpy(m, messageBuffer + 13, 1);
-        m[1] = '\n';
+        m[1] = '\0';
         msg_length = atoi(aux);
-        Serial.print("x:");
+        strncpy(msg, messageBuffer + 14, msg_length);
+        msg[msg_length] = '\0';
+
+        Serial.print("handleLcd x:");
         Serial.print(x);
         Serial.print(", y:");
         Serial.print(y);
@@ -110,8 +115,6 @@ void process() {
         Serial.print(msg_length);
         Serial.print("):");
         Serial.println(msg);
-        strncpy(msg, messageBuffer + 14, msg_length);
-        msg[msg_length] = '\0';
         handleLcd(val, msg_length, atoi(x), atoi(y), atoi(m), msg);
         break;
       case 98: handleServo(pin,val,aux);  break;
@@ -265,10 +268,6 @@ void handleLcd(char *val, int len, unsigned char x, unsigned char y, char mode, 
   char line[15];
   char remaining_chars=0, printed_chars=0, nb_chars=0;
   remaining_chars = len;
-  Serial.print("got lcd message of ");
-  Serial.print(len);
-  Serial.print(" characters: ");
-  Serial.println(msg);
   switch(atoi(val)) {
     case 0: // LCD_clear
       lcd.LCD_clear();
@@ -279,12 +278,12 @@ void handleLcd(char *val, int len, unsigned char x, unsigned char y, char mode, 
          if (i == y) {
            nb_chars = min(len, 14-x);
            strncpy(line, msg, nb_chars);
-           line[nb_chars] = '\n';
+           line[nb_chars] = '\0';
            lcd.LCD_write_string(x*6, i, line, mode);
          } else {
            nb_chars = min(remaining_chars, 14);
            strncpy(line, msg + printed_chars, nb_chars);
-           line[nb_chars] = '\n';
+           line[nb_chars] = '\0';
            lcd.LCD_write_string(0, i, line, mode);
          }
          printed_chars += nb_chars;
@@ -297,7 +296,7 @@ void handleLcd(char *val, int len, unsigned char x, unsigned char y, char mode, 
     case 3: // Writeln
       nb_chars = min(len, 14-x);
       strncpy(line, msg, nb_chars);
-      line[nb_chars] = '\n';
+      line[nb_chars] = '\0';
       lcd.LCD_write_string(x*6, y, line, mode);
       break;
     case 98:  // backlight(OFF)
