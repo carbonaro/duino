@@ -263,6 +263,8 @@ void aw(char *pin, char *val) {
 // handleLcd(val, msg_length, lcd_x, lcd_y, lcd_mode, msg);
 void handleLcd(char *val, int len, unsigned char x, unsigned char y, char mode, char *msg) {
   char line[15];
+  char remaining_chars=0, printed_chars=0, nb_chars=0;
+  remaining_chars = len;
   Serial.print("got lcd message of ");
   Serial.print(len);
   Serial.print(" characters: ");
@@ -275,29 +277,28 @@ void handleLcd(char *val, int len, unsigned char x, unsigned char y, char mode, 
        lcd.LCD_clear();
        for (int i=y ; i < 6 ; i++) {
          if (i == y) {
-           strncpy(line, msg, max(len, 14-x));
-           line[max(len, 14-x)] = '\n';
+           nb_chars = min(len, 14-x);
+           strncpy(line, msg, nb_chars);
+           line[nb_chars] = '\n';
            lcd.LCD_write_string(x*6, i, line, mode);
          } else {
-           if (len >= 14*(i+1)) {
-             // the line is going to be full
-             strncpy(line, msg + 14*(i-y), 14);
-             line[14] = '\n';
-           } else {
-             strncpy(line, msg + 14*(i-y), len-14*i);
-             line[len-14*i] = '\n';
-           }
+           nb_chars = min(remaining_chars, 14);
+           strncpy(line, msg + printed_chars, nb_chars);
+           line[nb_chars] = '\n';
            lcd.LCD_write_string(0, i, line, mode);
          }
+         printed_chars += nb_chars;
+         remaining_chars -= nb_chars;
        }
        break;
     case 2: // LCD_write_string_big
       // TDB
       break;
     case 3: // Writeln
-      strncpy(line, msg, max(len, 14-x));
-      line[max(len, 14-x)] = '\n';
-      lcd.LCD_write_string(x*6,y,line,mode);
+      nb_chars = min(len, 14-x);
+      strncpy(line, msg, nb_chars);
+      line[nb_chars] = '\n';
+      lcd.LCD_write_string(x*6, y, line, mode);
       break;
     case 98:  // backlight(OFF)
       lcd.backlight(OFF);
